@@ -1,4 +1,4 @@
-# wcdb-spm-prebuilt
+# wcdb.xcframework
 
 This repository provides **prebuilt XCFrameworks** of [WCDB](https://github.com/Tencent/wcdb) for Swift Package Manager (SPM).  
 It allows you to use WCDB without compiling its C/C++ core every time. The binaries include prebuilt `sqlcipher` and any applied patches.
@@ -16,19 +16,19 @@ Add the following line to your `Package.swift` dependencies:
 
 ```swift
 .package(
-    url: "https://github.com/0x1306a94/wcdb-spm-prebuilt", 
+    url: "https://github.com/0x1306a94/wcdb.xcframework", 
     from: "2.1.14"
 )
 ```
 
-Then add `wcdb-spm-prebuilt` as a dependency for your target:
+Then add `wcdb.xcframework` as a dependency for your target:
 ```swift
 .target(
     name: "MyApp",
     dependencies: [
-       .product(name: "WCDBSwift", package: "wcdb-spm-prebuilt"),
+       .product(name: "WCDBSwift", package: "wcdb.xcframework"),
        // or
-       .product(name: "WCDBObjc", package: "wcdb-spm-prebuilt"),
+       .product(name: "WCDBObjc", package: "wcdb.xcframework"),
     ]
 )
 ```
