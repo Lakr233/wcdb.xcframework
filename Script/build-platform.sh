@@ -1,17 +1,16 @@
 #!/bin/bash
 
-# Build WCDB for a specific platform
 # Usage: ./build-platform.sh <wcdb_source_dir> <scheme> <platform> <output_dir>
 # Platforms: ios, ios-simulator, macos, macos-catalyst, tvos, tvos-simulator, watchos, watchos-simulator
 
-set -e
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-WCDB_SOURCE_DIR=$1
-SCHEME=$2
-PLATFORM=$3
-OUTPUT_DIR=$4
+WCDB_SOURCE_DIR="${1-}"
+SCHEME="${2-}"
+PLATFORM="${3-}"
+OUTPUT_DIR="${4-}"
 
 if [ -z "$WCDB_SOURCE_DIR" ] || [ -z "$SCHEME" ] || [ -z "$PLATFORM" ] || [ -z "$OUTPUT_DIR" ]; then
 	echo "Usage: $0 <wcdb_source_dir> <scheme> <platform> <output_dir>"
@@ -31,7 +30,6 @@ echo "[*] Output: $OUTPUT_DIR"
 
 mkdir -p "$OUTPUT_DIR"
 
-# Map platform to xcodebuild destination
 case "$PLATFORM" in
 ios)
 	DESTINATION="generic/platform=iOS,name=Any iOS Device"
@@ -66,35 +64,33 @@ esac
 
 ARCHIVE_PATH="$OUTPUT_DIR/$SCHEME-$PLATFORM"
 
-# Extra args for Swift library distribution
-EXTRA_ARGS=""
-if [ "$SCHEME" = "WCDBSwift" ]; then
-	EXTRA_ARGS="BUILD_LIBRARY_FOR_DISTRIBUTION=YES"
-fi
-
 echo "[*] Destination: $DESTINATION"
 echo "[*] Archive path: $ARCHIVE_PATH"
 
-# Check if xcbeautify is available
+run_archive() {
+	local extra_args=()
+	if [ "$SCHEME" = "WCDBSwift" ]; then
+		extra_args=(BUILD_LIBRARY_FOR_DISTRIBUTION=YES)
+	fi
+	xcodebuild archive \
+		-project "$PROJECT_FILE" \
+		-scheme "$SCHEME" \
+		-configuration Release \
+		-destination "$DESTINATION" \
+		-archivePath "$ARCHIVE_PATH" \
+		SKIP_INSTALL=NO \
+		"${extra_args[@]}"
+}
+
 if command -v xcbeautify &>/dev/null; then
-	xcodebuild archive \
-		-project "$PROJECT_FILE" \
-		-scheme "$SCHEME" \
-		-configuration Release \
-		-destination "$DESTINATION" \
-		-archivePath "$ARCHIVE_PATH" \
-		SKIP_INSTALL=NO \
-		$EXTRA_ARGS \
-		2>&1 | xcbeautify
+	run_archive 2>&1 | xcbeautify
 else
-	xcodebuild archive \
-		-project "$PROJECT_FILE" \
-		-scheme "$SCHEME" \
-		-configuration Release \
-		-destination "$DESTINATION" \
-		-archivePath "$ARCHIVE_PATH" \
-		SKIP_INSTALL=NO \
-		$EXTRA_ARGS
+	run_archive
+fi
+
+if [ ! -d "$ARCHIVE_PATH.xcarchive" ]; then
+	echo "[!] Archive not created: $ARCHIVE_PATH.xcarchive"
+	exit 1
 fi
 
 echo "[*] Build complete: $ARCHIVE_PATH.xcarchive"

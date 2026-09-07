@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
       wcdb_version:
-        description: "WCDB version tag (e.g., 2.1.15)"
+        description: "WCDB version tag (e.g., 2.1.16)"
         required: false
         type: string
         default: ""
@@ -18,7 +18,7 @@ permissions:
   contents: write
 
 env:
-  DEFAULT_WCDB_VERSION: 2.1.15
+  DEFAULT_WCDB_VERSION: 2.1.16
 
 jobs:
   prepare:
@@ -26,7 +26,6 @@ jobs:
     outputs:
       wcdb_version: ${{ steps.version.outputs.wcdb_version }}
       clone_tag: ${{ steps.version.outputs.clone_tag }}
-      release_tag: ${{ steps.version.outputs.release_tag }}
       storage_release_tag: ${{ steps.version.outputs.storage_release_tag }}
       skip_release: ${{ github.event.inputs.skip_release || 'false' }}
     steps:
@@ -36,10 +35,8 @@ jobs:
           RAW_WCDB_VERSION="${{ github.event.inputs.wcdb_version }}"
           [ -z "$RAW_WCDB_VERSION" ] && RAW_WCDB_VERSION="${{ env.DEFAULT_WCDB_VERSION }}"
           WCDB_VERSION="${RAW_WCDB_VERSION#v}"
-          CLONE_TAG="v$WCDB_VERSION"
           echo "wcdb_version=$WCDB_VERSION" >> $GITHUB_OUTPUT
-          echo "clone_tag=$CLONE_TAG" >> $GITHUB_OUTPUT
-          echo "release_tag=$WCDB_VERSION" >> $GITHUB_OUTPUT
+          echo "clone_tag=v$WCDB_VERSION" >> $GITHUB_OUTPUT
           echo "storage_release_tag=storage.$WCDB_VERSION" >> $GITHUB_OUTPUT
 
   build:
@@ -77,8 +74,9 @@ jobs:
 
       - name: Build ${{ matrix.platform }}
         run: |
-          ./Script/build-platform.sh wcdb WCDBSwift ${{ matrix.platform }} build/archives
-          ./Script/build-platform.sh wcdb WCDBObjc ${{ matrix.platform }} build/archives
+          for scheme in WCDBSwift WCDBObjc; do
+            ./Script/build-platform.sh wcdb "$scheme" ${{ matrix.platform }} build/archives
+          done
 
       - name: Pack artifacts with tar (preserve symlinks)
         run: tar -cvf build-${{ matrix.platform }}.tar -C build/archives .
@@ -155,7 +153,11 @@ jobs:
       - name: Remove existing Storage Release
         if: needs.prepare.outputs.skip_release != 'true'
         continue-on-error: true
-        run: git push origin --delete tag ${{ needs.prepare.outputs.storage_release_tag }} || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete ${{ needs.prepare.outputs.storage_release_tag }} --yes
+          git push origin --delete tag ${{ needs.prepare.outputs.storage_release_tag }}
 
       - name: Publish Storage Release
         if: needs.prepare.outputs.skip_release != 'true'
@@ -191,16 +193,25 @@ jobs:
 
       - name: Commit & Push
         if: needs.prepare.outputs.skip_release != 'true'
-        uses: actions-js/push@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
-          message: "Update Package.swift for ${{ needs.prepare.outputs.wcdb_version }}"
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Package.swift WCDB-LICENSE
+          if git diff --cached --quiet; then
+            echo "No Package.swift or WCDB-LICENSE changes"
+            exit 0
+          fi
+          git commit -m "Update Package.swift for ${{ needs.prepare.outputs.wcdb_version }}"
+          git push origin HEAD:main
 
       - name: Remove existing Release tag
         if: needs.prepare.outputs.skip_release != 'true'
         continue-on-error: true
-        run: git push origin --delete tag ${{ needs.prepare.outputs.release_tag }} || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete ${{ needs.prepare.outputs.wcdb_version }} --yes
+          git push origin --delete tag ${{ needs.prepare.outputs.wcdb_version }}
 
       - name: Pull & Create Final Release
         if: needs.prepare.outputs.skip_release != 'true'
@@ -213,7 +224,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           target_commitish: ${{ env.RELEASE_TAG_COMMIT }}
-          tag_name: ${{ needs.prepare.outputs.release_tag }}
+          tag_name: ${{ needs.prepare.outputs.wcdb_version }}
           body: |
             ## WCDB Apple Package
             WCDB Version: ${{ needs.prepare.outputs.wcdb_version }}

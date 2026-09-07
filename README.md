@@ -1,23 +1,27 @@
 # wcdb.xcframework
 
-This repository provides **prebuilt XCFrameworks** of [WCDB](https://github.com/Tencent/wcdb) for Swift Package Manager (SPM).  
-It allows you to use WCDB without compiling its C/C++ core every time. The binaries include prebuilt `sqlcipher` and any applied patches.
+Use prebuilt [WCDB](https://github.com/Tencent/wcdb) XCFrameworks with Swift Package Manager.  
+Use WCDB without compiling its C/C++ core. The binaries include prebuilt SQLCipher.
 
-| Platform          | Architectures         | Minimal Deployment Target |
+| Platform          | Architectures         | Minimum Deployment Target |
 |------------------|----------------------|---------------------------|
 | macOS             | x86_64 arm64        | 10.13                     |
-| mac Catalyst      | x86_64 arm64        | 10.13 (iOS ABI 13.1)      |
-| iOS               | arm64               | 11.0                      |
-| iOS Simulator     | x86_64 arm64        | 11.0                      |
+| Mac Catalyst      | x86_64 arm64        | 13.0                      |
+| iOS               | arm64               | 12.0                      |
+| iOS Simulator     | x86_64 arm64        | 12.0                      |
+| tvOS              | arm64               | 12.0                      |
+| tvOS Simulator    | x86_64 arm64        | 12.0                      |
+| watchOS           | arm64 arm64_32      | 5.0                       |
+| watchOS Simulator | x86_64 arm64        | 5.0                       |
 
 ## Usage
 
-Add the following line to your `Package.swift` dependencies:
+Add this package to your `Package.swift` dependencies:
 
 ```swift
 .package(
-    url: "https://github.com/0x1306a94/wcdb.xcframework", 
-    from: "2.1.14"
+    url: "https://github.com/Lakr233/wcdb.xcframework",
+    from: "2.1.16"
 )
 ```
 
@@ -35,13 +39,13 @@ Then add `wcdb.xcframework` as a dependency for your target:
 
 ### License Notice
 
-This repository only provides prebuilt binaries of WCDB for convenience.
+This repository provides only prebuilt WCDB binaries.
 
 WCDB is an open-source project by Tencent:
 https://github.com/Tencent/wcdb
 
 Original WCDB license: see `WCDB-LICENSE`.
 
-## Credits:
+## Credits
 
 - [https://github.com/Tencent/wcdb](https://github.com/Tencent/wcdb)

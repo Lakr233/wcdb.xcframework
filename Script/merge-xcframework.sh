@@ -1,14 +1,13 @@
 #!/bin/bash
 
-# Merge platform archives into xcframeworks
 # Usage: ./merge-xcframework.sh <archives_dir> <output_dir>
 
-set -e
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-ARCHIVES_DIR=$1
-OUTPUT_DIR=$2
+ARCHIVES_DIR="${1-}"
+OUTPUT_DIR="${2-}"
 
 if [ -z "$ARCHIVES_DIR" ] || [ -z "$OUTPUT_DIR" ]; then
 	echo "Usage: $0 <archives_dir> <output_dir>"
@@ -26,7 +25,6 @@ PLATFORMS="ios ios-simulator macos macos-catalyst tvos tvos-simulator watchos wa
 for SCHEME in $SCHEMES; do
 	echo "[*] Creating $SCHEME.xcframework..."
 
-	# Build xcodebuild command
 	XCFRAMEWORK_CMD=("xcodebuild" "-create-xcframework")
 
 	for PLATFORM in $PLATFORMS; do
@@ -39,7 +37,7 @@ for SCHEME in $SCHEMES; do
 	done
 
 	XCFRAMEWORK_PATH="$OUTPUT_DIR/$SCHEME.xcframework"
-	rm -rf "$XCFRAMEWORK_PATH" 2>/dev/null || true
+	rm -rf "$XCFRAMEWORK_PATH"
 	XCFRAMEWORK_CMD+=("-output" "$XCFRAMEWORK_PATH")
 
 	echo "[*] Running: ${XCFRAMEWORK_CMD[*]}"
