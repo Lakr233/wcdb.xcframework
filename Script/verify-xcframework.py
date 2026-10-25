@@ -32,12 +32,14 @@ SHARDS = {
     "visionos-simulator": ("xros", "simulator"),
 }
 
-# Minimum OS each shard must declare. These come from WCDB's xcconfig;
-# publishing a slice with a higher floor than the package advertises breaks
-# consumers building for the advertised minimum.
+# Minimum OS each shard must declare: the deployment targets in platforms.sh.
+# Package.swift must not advertise a lower floor than these, or consumers can
+# target OS versions the binary was not built for. Mac Catalyst records the
+# macOS version: 10.15 is Catalyst 13.1, the first release, so the package's
+# 13.0 is equivalent.
 EXPECTED_MIN_OS = {
-    "ios": "11.0",
-    "ios-simulator": "11.0",
+    "ios": "12.0",
+    "ios-simulator": "12.0",
     "macos": "10.13",
     "macos-catalyst": "10.15",
     "tvos": "12.4",
@@ -101,12 +103,15 @@ def main():
         for library in libraries
     }
 
+    def labels(identities):
+        return sorted(f"{platform}/{variant or 'device'}" for platform, variant in identities)
+
     missing = expected - actual
     unexpected = actual - expected
     if missing:
-        return fail(f"missing slices: {sorted(missing)}")
+        return fail(f"missing slices: {labels(missing)}")
     if unexpected:
-        return fail(f"unexpected slices: {sorted(unexpected)}")
+        return fail(f"unexpected slices: {labels(unexpected)}")
 
     for library in libraries:
         platform = library.get("SupportedPlatform")

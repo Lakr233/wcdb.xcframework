@@ -22,7 +22,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: macos-15
+    runs-on: macos-latest
     outputs:
       wcdb_version: ${{ steps.version.outputs.wcdb_version }}
       clone_tag: ${{ steps.version.outputs.clone_tag }}
@@ -50,7 +50,7 @@ jobs:
 
   build:
     needs: prepare
-    runs-on: macos-15
+    runs-on: macos-latest
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -62,7 +62,7 @@ jobs:
 
       - name: Setup
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.4.app
+          xcodebuild -version
           brew install xcbeautify
 
       - name: Clone WCDB
@@ -92,7 +92,7 @@ jobs:
 
   merge-and-release:
     needs: [prepare, build]
-    runs-on: macos-15
+    runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -100,6 +100,9 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show Xcode version
+        run: xcodebuild -version
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4

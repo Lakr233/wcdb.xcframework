@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 PLATFORM_SUFFIX = " xros xrsimulator"
-XROS_PATTERN = re.compile(r"(?:^|\s)xros(?:\s|$)")
+ASSIGNMENT = re.compile(r'^\s*SUPPORTED_PLATFORMS = "?([^";\n]*)', re.MULTILINE)
 
 VISIONOS_LDFLAGS = """OTHER_LDFLAGS[sdk=xros*] = $(inherited) -framework zstd -framework UIKit
 OTHER_LDFLAGS[sdk=xrsimulator*] = $(inherited) -framework zstd -framework UIKit"""
@@ -43,7 +43,7 @@ def patch_quoted_platforms(path: Path) -> int:
         nonlocal count
         count += 1
         value = match.group(2)
-        if not XROS_PATTERN.search(value):
+        if "xros" not in value.split():
             value += PLATFORM_SUFFIX
         return match.group(1) + value + match.group(3)
 
@@ -60,12 +60,18 @@ def patch_unquoted_platforms(path: Path) -> int:
         nonlocal count
         count += 1
         value = match.group(2).rstrip()
-        if not XROS_PATTERN.search(value):
+        if "xros" not in value.split():
             value += PLATFORM_SUFFIX
         return match.group(1) + value
 
     path.write_text(pattern.sub(replace, text))
     return count
+
+
+def unpatched_assignments(path: Path) -> tuple[int, int]:
+    """Return (assignments, assignments without xros) in any spelling."""
+    values = ASSIGNMENT.findall(path.read_text())
+    return len(values), len([value for value in values if "xros" not in value.split()])
 
 
 def ensure_xros_deployment_target(path: Path) -> None:
@@ -120,34 +126,25 @@ def main() -> int:
         if not path.is_file():
             print(f"[!] Missing project: {path}", file=sys.stderr)
             return 1
-        total = patch_quoted_platforms(path)
-        patched = len(
-            [
-                line
-                for line in path.read_text().splitlines()
-                if "SUPPORTED_PLATFORMS =" in line and "xros" in line
-            ]
-        )
-        # The four framework targets, two configurations each, live in
-        # WCDB.xcodeproj; the subprojects have two each. A different count means
-        # the project layout moved, so stop instead of publishing a partial set.
-        if total == 0 or patched != total:
-            print(
-                f"[!] {path}: patched {patched} of {total} "
-                "SUPPORTED_PLATFORMS assignments",
-                file=sys.stderr,
-            )
-            return 1
+        patch_quoted_platforms(path)
 
     for path in xcconfigs:
         if not path.is_file():
             print(f"[!] Missing xcconfig: {path}", file=sys.stderr)
             return 1
-        if patch_unquoted_platforms(path) == 0:
-            print(f"[!] No SUPPORTED_PLATFORMS in {path}", file=sys.stderr)
-            return 1
-        if "xros" not in path.read_text():
-            print(f"[!] {path} does not list xros", file=sys.stderr)
+        patch_unquoted_platforms(path)
+
+    # Re-read every assignment, whatever its spelling. One the patterns above
+    # did not match would leave that target without visionOS, and the archive
+    # would drop it silently, so stop instead of publishing a partial set.
+    for path in projects + xcconfigs:
+        total, missing = unpatched_assignments(path)
+        if total == 0 or missing:
+            print(
+                f"[!] {path}: {missing} of {total} "
+                "SUPPORTED_PLATFORMS assignments lack xros",
+                file=sys.stderr,
+            )
             return 1
 
     if not linker_config.is_file():

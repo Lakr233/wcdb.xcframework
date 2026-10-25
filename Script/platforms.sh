@@ -3,7 +3,7 @@
 # Single source of truth for the platform shards. build-platform.sh,
 # merge-xcframework.sh and the release workflow read this list, so adding a
 # slice cannot leave another step behind. Script/test-imports.sh carries the
-# matching consumer targets; update it when a shard is added.
+# matching consumer targets and fails when a shard here has none.
 #
 # Shard names are also the archive suffix: <scheme>-<shard>.xcarchive.
 # They stay stable so existing release tooling keeps working.
@@ -32,27 +32,34 @@ platform_destination() {
 	esac
 }
 
-# Extra KEY=VALUE build settings, one per line.
+# Deployment targets for every shard. Passing them on the command line makes
+# them reach the zstd and sqlcipher subprojects too, whose own floors (iOS 8,
+# tvOS 9, watchOS 2) are older than current SDKs support.
 #
-# XROS_DEPLOYMENT_TARGET must be pinned: without it Xcode uses the SDK version
-# as the minimum and the slice claims it needs the newest visionOS. The
-# upstream project has no xros deployment setting.
+# They are WCDB's floors except where the SDK no longer goes that low: WCDB
+# declares iOS 11.0, and Xcode 26 supports iOS 12.0 and later. Upstream has no
+# visionOS floor, and without one Xcode uses the SDK version.
+#
+# Script/verify-xcframework.py, Script/test-imports.sh, Package.swift.template
+# and README.md carry the same numbers. When a newer default Xcode drops one
+# of these, the build or the verify step fails; raise it in all five places.
+deployment_targets() {
+	echo "IPHONEOS_DEPLOYMENT_TARGET=12.0"
+	echo "MACOSX_DEPLOYMENT_TARGET=10.13"
+	echo "TVOS_DEPLOYMENT_TARGET=12.4"
+	echo "WATCHOS_DEPLOYMENT_TARGET=6.0"
+	echo "XROS_DEPLOYMENT_TARGET=1.0"
+}
+
+# Extra KEY=VALUE build settings, one per line.
 #
 # visionOS has no Intel simulator, but a generic simulator destination still
 # resolves ARCHS to "arm64 x86_64"; pin it so we do not publish a slice that can
 # never run.
 platform_build_settings() {
+	deployment_targets
 	case "$1" in
-	visionos)
-		echo "XROS_DEPLOYMENT_TARGET=1.0"
-		# Current SDKs refuse the old tvOS floor declared by the zstd and
-		# sqlcipher subprojects. The setting only satisfies that validation;
-		# this archive contains no tvOS code.
-		echo "TVOS_DEPLOYMENT_TARGET=15.0"
-		;;
 	visionos-simulator)
-		echo "XROS_DEPLOYMENT_TARGET=1.0"
-		echo "TVOS_DEPLOYMENT_TARGET=15.0"
 		echo "ARCHS=arm64"
 		;;
 	esac
