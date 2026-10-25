@@ -41,6 +41,17 @@ Then add `wcdb.xcframework` as a dependency for your target:
 )
 ```
 
+### Versioning
+
+Package versions follow `<WCDB major>.<WCDB minor>.<yymmdd><NN>`. For example,
+`2.1.26102501` is the first release of the WCDB 2.1 series built on 2026-10-25
+(UTC). The release notes name the exact WCDB version, and the binaries live in
+a `storage.<WCDB version>.<timestamp>` release.
+
+Every release gets new tags, and published tags and binaries are never
+replaced, so a resolved version keeps working. Releases before this scheme are
+tagged with the WCDB version itself (`2.1.15`, `2.1.16`).
+
 ### License Notice
 
 This repository provides only prebuilt WCDB binaries.

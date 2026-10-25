@@ -17,6 +17,12 @@ on:
 permissions:
   contents: write
 
+# Release versions count earlier tags of the same day, so two runs must not
+# pick a number at the same time.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 env:
   DEFAULT_WCDB_VERSION: 2.1.16
 
@@ -26,6 +32,7 @@ jobs:
     outputs:
       wcdb_version: ${{ steps.version.outputs.wcdb_version }}
       clone_tag: ${{ steps.version.outputs.clone_tag }}
+      package_version: ${{ steps.version.outputs.package_version }}
       storage_release_tag: ${{ steps.version.outputs.storage_release_tag }}
       platforms: ${{ steps.version.outputs.platforms }}
       skip_release: ${{ github.event.inputs.skip_release || 'false' }}
@@ -41,7 +48,10 @@ jobs:
           WCDB_VERSION="${RAW_WCDB_VERSION#v}"
           echo "wcdb_version=$WCDB_VERSION" >> $GITHUB_OUTPUT
           echo "clone_tag=v$WCDB_VERSION" >> $GITHUB_OUTPUT
-          echo "storage_release_tag=storage.$WCDB_VERSION" >> $GITHUB_OUTPUT
+
+          RELEASE=$(./Script/release-version.sh "$WCDB_VERSION")
+          echo "$RELEASE"
+          echo "$RELEASE" >> $GITHUB_OUTPUT
 
           PLATFORMS=$(source Script/platforms.sh && platforms_list)
           [ -n "$PLATFORMS" ] || { echo "empty platform list"; exit 1; }
@@ -158,24 +168,30 @@ jobs:
           path: ./build/xcframeworks/*.zip
           retention-days: 7
 
-      - name: Remove existing Storage Release
+      # An existing tag would make the release steps below attach to it instead
+      # of creating it at this run's commit, publishing the wrong Package.swift.
+      - name: Check release tags are still free
         if: needs.prepare.outputs.skip_release != 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete ${{ needs.prepare.outputs.storage_release_tag }} --yes
-          git push origin --delete tag ${{ needs.prepare.outputs.storage_release_tag }}
+          for tag in "${{ needs.prepare.outputs.package_version }}" "${{ needs.prepare.outputs.storage_release_tag }}"; do
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+              echo "Tag already exists: $tag"
+              exit 1
+            fi
+          done
 
       - name: Publish Storage Release
         if: needs.prepare.outputs.skip_release != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.storage_release_tag }}
+          target_commitish: ${{ github.sha }}
+          make_latest: false
           files: ./build/xcframeworks/*.zip
           body: |
             ## Prebuilt WCDB binary for SPM
             WCDB Version: ${{ needs.prepare.outputs.wcdb_version }}
+            Package Version: ${{ needs.prepare.outputs.package_version }}
 
       - name: Build Package.swift
         if: needs.prepare.outputs.skip_release != 'true'
@@ -207,24 +223,10 @@ jobs:
           git add Package.swift WCDB-LICENSE
           if git diff --cached --quiet; then
             echo "No Package.swift or WCDB-LICENSE changes"
-            exit 0
+          else
+            git commit -m "Update Package.swift for ${{ needs.prepare.outputs.package_version }} (WCDB ${{ needs.prepare.outputs.wcdb_version }})"
+            git push origin HEAD:main
           fi
-          git commit -m "Update Package.swift for ${{ needs.prepare.outputs.wcdb_version }}"
-          git push origin HEAD:main
-
-      - name: Remove existing Release tag
-        if: needs.prepare.outputs.skip_release != 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release delete ${{ needs.prepare.outputs.wcdb_version }} --yes
-          git push origin --delete tag ${{ needs.prepare.outputs.wcdb_version }}
-
-      - name: Pull & Create Final Release
-        if: needs.prepare.outputs.skip_release != 'true'
-        run: |
-          git fetch origin main && git checkout main && git pull origin main
           echo "RELEASE_TAG_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
       - name: Create Final Release
@@ -232,8 +234,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           target_commitish: ${{ env.RELEASE_TAG_COMMIT }}
-          tag_name: ${{ needs.prepare.outputs.wcdb_version }}
+          tag_name: ${{ needs.prepare.outputs.package_version }}
           body: |
             ## WCDB Apple Package
             WCDB Version: ${{ needs.prepare.outputs.wcdb_version }}
+            Binaries: ${{ needs.prepare.outputs.storage_release_tag }}
             Package.swift updated automatically
