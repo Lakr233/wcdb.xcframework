@@ -20,13 +20,13 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "WCDBSwift",
-            url: "https://github.com/Lakr233/wcdb.xcframework/releases/download/storage.2.1.16/WCDBSwift.xcframework.zip",
-            checksum: "f4e04613a772ba8e4511374d1b8c866962be9c1acf923c300c23d711374cb4a0"
+            url: "https://github.com/Lakr233/wcdb.xcframework/releases/download/storage.2.1.16.20261025150750/WCDBSwift.xcframework.zip",
+            checksum: "279c200a159b90e357499af2a68c95388dd2ac699f0dc993a18030489bf71c69"
         ),
         .binaryTarget(
             name: "WCDBObjc",
-            url: "https://github.com/Lakr233/wcdb.xcframework/releases/download/storage.2.1.16/WCDBObjc.xcframework.zip",
-            checksum: "1eda40c3b8e4e306bfd240e67b2c9ccefea7bddfea3429177ad795a4adee5d9a"
+            url: "https://github.com/Lakr233/wcdb.xcframework/releases/download/storage.2.1.16.20261025150750/WCDBObjc.xcframework.zip",
+            checksum: "bd580a8a6eebff886d821a5fc8ab802b51728b559dfe66a893cfe3af9c92808e"
         ),
     ]
 )
