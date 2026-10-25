@@ -1,11 +1,18 @@
 #!/bin/bash
 
 # Usage: ./build-platform.sh <wcdb_source_dir> <scheme> <platform> <output_dir>
-# Platforms: ios, ios-simulator, macos, macos-catalyst, tvos, tvos-simulator, watchos, watchos-simulator
+# Platforms: see ./platforms.sh (ios, ios-simulator, macos, macos-catalyst,
+#            tvos, tvos-simulator, watchos, watchos-simulator, visionos,
+#            visionos-simulator)
+#
+# Set DERIVED_DATA_PATH to keep build products out of the default Xcode
+# DerivedData directory (CI leaves it unset).
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+source Script/platforms.sh
 
 WCDB_SOURCE_DIR="${1-}"
 SCHEME="${2-}"
@@ -14,7 +21,13 @@ OUTPUT_DIR="${4-}"
 
 if [ -z "$WCDB_SOURCE_DIR" ] || [ -z "$SCHEME" ] || [ -z "$PLATFORM" ] || [ -z "$OUTPUT_DIR" ]; then
 	echo "Usage: $0 <wcdb_source_dir> <scheme> <platform> <output_dir>"
-	echo "Platforms: ios, ios-simulator, macos, macos-catalyst, tvos, tvos-simulator, watchos, watchos-simulator"
+	echo "Platforms: $(platforms_list)"
+	exit 1
+fi
+
+if ! platforms_list | tr ' ' '\n' | grep -Fxq "$PLATFORM"; then
+	echo "[!] Unknown platform: $PLATFORM"
+	echo "Valid platforms: $(platforms_list)"
 	exit 1
 fi
 
@@ -24,54 +37,50 @@ if [ ! -d "$PROJECT_FILE" ]; then
 	exit 1
 fi
 
+DESTINATION=$(platform_destination "$PLATFORM")
+
+PLATFORM_SETTINGS=()
+while IFS= read -r setting; do
+	if [ -n "$setting" ]; then
+		PLATFORM_SETTINGS+=("$setting")
+	fi
+done < <(platform_build_settings "$PLATFORM")
+
+EXTRA_ARGS=()
+if [ ${#PLATFORM_SETTINGS[@]} -gt 0 ]; then
+	EXTRA_ARGS=("${PLATFORM_SETTINGS[@]}")
+fi
+if [ -n "${DERIVED_DATA_PATH:-}" ]; then
+	EXTRA_ARGS+=("-derivedDataPath" "$DERIVED_DATA_PATH")
+fi
+
 echo "[*] Building $SCHEME for $PLATFORM"
 echo "[*] Project: $PROJECT_FILE"
+echo "[*] Destination: $DESTINATION"
 echo "[*] Output: $OUTPUT_DIR"
 
 mkdir -p "$OUTPUT_DIR"
 
-case "$PLATFORM" in
-ios)
-	DESTINATION="generic/platform=iOS,name=Any iOS Device"
-	;;
-ios-simulator)
-	DESTINATION="generic/platform=iOS Simulator"
-	;;
-macos)
-	DESTINATION="generic/platform=macOS,name=Any Mac"
-	;;
-macos-catalyst)
-	DESTINATION="generic/platform=macOS,variant=Mac Catalyst,name=Any Mac"
-	;;
-tvos)
-	DESTINATION="generic/platform=tvOS,name=Any tvOS Device"
-	;;
-tvos-simulator)
-	DESTINATION="generic/platform=tvOS Simulator"
-	;;
-watchos)
-	DESTINATION="generic/platform=watchOS,name=Any watchOS Device"
-	;;
-watchos-simulator)
-	DESTINATION="generic/platform=watchOS Simulator"
-	;;
-*)
-	echo "[!] Unknown platform: $PLATFORM"
-	echo "Valid platforms: ios, ios-simulator, macos, macos-catalyst, tvos, tvos-simulator, watchos, watchos-simulator"
-	exit 1
-	;;
-esac
-
 ARCHIVE_PATH="$OUTPUT_DIR/$SCHEME-$PLATFORM"
 
-echo "[*] Destination: $DESTINATION"
 echo "[*] Archive path: $ARCHIVE_PATH"
 
+# Never let a failed rebuild leave the previous archive in place for the merge
+# step to pick up.
+rm -rf "$ARCHIVE_PATH.xcarchive"
+
 run_archive() {
-	local extra_args=()
-	if [ "$SCHEME" = "WCDBSwift" ]; then
-		extra_args=(BUILD_LIBRARY_FOR_DISTRIBUTION=YES)
+	local build_settings=()
+	if [ ${#EXTRA_ARGS[@]} -gt 0 ]; then
+		build_settings=("${EXTRA_ARGS[@]}")
 	fi
+	if [ "$SCHEME" = "WCDBSwift" ]; then
+		build_settings+=(BUILD_LIBRARY_FOR_DISTRIBUTION=YES)
+	fi
+	# Bitcode is gone from current toolchains, but upstream still sets it for
+	# tvOS. Frameworks are not signed, so skip signing to keep runner
+	# identities out of the archive.
+	build_settings+=(ENABLE_BITCODE=NO CODE_SIGNING_ALLOWED=NO)
 	xcodebuild archive \
 		-project "$PROJECT_FILE" \
 		-scheme "$SCHEME" \
@@ -79,7 +88,7 @@ run_archive() {
 		-destination "$DESTINATION" \
 		-archivePath "$ARCHIVE_PATH" \
 		SKIP_INSTALL=NO \
-		"${extra_args[@]}"
+		"${build_settings[@]+"${build_settings[@]}"}"
 }
 
 if command -v xcbeautify &>/dev/null; then
@@ -88,8 +97,9 @@ else
 	run_archive
 fi
 
-if [ ! -d "$ARCHIVE_PATH.xcarchive" ]; then
-	echo "[!] Archive not created: $ARCHIVE_PATH.xcarchive"
+FRAMEWORK_PATH="$ARCHIVE_PATH.xcarchive/Products/Library/Frameworks/$SCHEME.framework"
+if [ ! -d "$FRAMEWORK_PATH" ]; then
+	echo "[!] Archive completed without $SCHEME.framework: $FRAMEWORK_PATH"
 	exit 1
 fi
 

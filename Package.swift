@@ -7,8 +7,9 @@ let package = Package(
     name: "wcdb.xcframework",
     platforms: [
         .iOS(.v12),
-        .watchOS(.v5),
+        .watchOS(.v6),
         .tvOS(.v12),
+        .visionOS(.v1),
         .macOS(.v10_13),
         .macCatalyst(.v13),
     ],

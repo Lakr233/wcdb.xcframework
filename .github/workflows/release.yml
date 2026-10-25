@@ -27,8 +27,12 @@ jobs:
       wcdb_version: ${{ steps.version.outputs.wcdb_version }}
       clone_tag: ${{ steps.version.outputs.clone_tag }}
       storage_release_tag: ${{ steps.version.outputs.storage_release_tag }}
+      platforms: ${{ steps.version.outputs.platforms }}
       skip_release: ${{ github.event.inputs.skip_release || 'false' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Determine Version
         id: version
         run: |
@@ -39,24 +43,19 @@ jobs:
           echo "clone_tag=v$WCDB_VERSION" >> $GITHUB_OUTPUT
           echo "storage_release_tag=storage.$WCDB_VERSION" >> $GITHUB_OUTPUT
 
+          PLATFORMS=$(source Script/platforms.sh && platforms_list)
+          [ -n "$PLATFORMS" ] || { echo "empty platform list"; exit 1; }
+          PLATFORMS_JSON=$(printf '%s\n' $PLATFORMS | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read().split()))')
+          echo "platforms=$PLATFORMS_JSON" >> $GITHUB_OUTPUT
+
   build:
     needs: prepare
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          [
-            ios,
-            ios-simulator,
-            macos,
-            macos-catalyst,
-            tvos,
-            tvos-simulator,
-            watchos,
-            watchos-simulator,
-          ]
+        platform: ${{ fromJSON(needs.prepare.outputs.platforms) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,6 +70,9 @@ jobs:
           git clone --depth 1 --branch "${{ needs.prepare.outputs.clone_tag }}" \
             https://github.com/Tencent/wcdb.git wcdb
           cd wcdb && git submodule update --init --recursive --depth 1
+
+      - name: Patch WCDB for visionOS
+        run: python3 Script/patch-upstream.py wcdb
 
       - name: Build ${{ matrix.platform }}
         run: |
@@ -128,6 +130,9 @@ jobs:
 
       - name: Merge XCFrameworks
         run: ./Script/merge-xcframework.sh ./build/archives ./build/xcframeworks
+
+      - name: Check consumer imports for every slice
+        run: ./Script/test-imports.sh ./build/xcframeworks
 
       - name: Zip XCFrameworks
         run: |

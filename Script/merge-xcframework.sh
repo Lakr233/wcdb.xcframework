@@ -6,6 +6,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+source Script/platforms.sh
+
 ARCHIVES_DIR="${1-}"
 OUTPUT_DIR="${2-}"
 
@@ -14,13 +16,14 @@ if [ -z "$ARCHIVES_DIR" ] || [ -z "$OUTPUT_DIR" ]; then
 	exit 1
 fi
 
+PLATFORMS=$(platforms_list)
+
 echo "[*] Merging xcframeworks from: $ARCHIVES_DIR"
 echo "[*] Output: $OUTPUT_DIR"
 
 mkdir -p "$OUTPUT_DIR"
 
 SCHEMES="WCDBSwift WCDBObjc"
-PLATFORMS="ios ios-simulator macos macos-catalyst tvos tvos-simulator watchos watchos-simulator"
 
 for SCHEME in $SCHEMES; do
 	echo "[*] Creating $SCHEME.xcframework..."
@@ -33,6 +36,11 @@ for SCHEME in $SCHEMES; do
 			echo "[!] Missing archive: $ARCHIVE_PATH"
 			exit 1
 		fi
+		FRAMEWORK_PATH="$ARCHIVE_PATH/Products/Library/Frameworks/$SCHEME.framework"
+		if [ ! -d "$FRAMEWORK_PATH" ]; then
+			echo "[!] Missing framework: $FRAMEWORK_PATH"
+			exit 1
+		fi
 		XCFRAMEWORK_CMD+=("-archive" "$ARCHIVE_PATH" "-framework" "$SCHEME.framework")
 	done
 
@@ -42,6 +50,8 @@ for SCHEME in $SCHEMES; do
 
 	echo "[*] Running: ${XCFRAMEWORK_CMD[*]}"
 	"${XCFRAMEWORK_CMD[@]}"
+
+	python3 Script/verify-xcframework.py "$XCFRAMEWORK_PATH" --shards $PLATFORMS
 
 	echo "[*] Created: $XCFRAMEWORK_PATH"
 done
